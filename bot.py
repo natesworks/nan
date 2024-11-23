@@ -98,6 +98,7 @@ async def addrule(ctx, name: str, triggers: str, amount: int, time: int, punishm
     if name in get_rules(ctx.guild.id):
         await ctx.reply("Rule name already exists.", mention_author=False)
         return
+    
     add_rule(ctx.guild.id, name, triggers.split(";"), amount, time, punishment)
     await ctx.reply(f"Rule {name} added.", mention_author=False)
 
@@ -138,7 +139,7 @@ async def togglebots(ctx, value: str):
 @bot.command()
 async def listrules(ctx):
     if not ctx.author.guild_permissions.administrator and ctx.author.id != OWNER:
-        embed = discord.embed(
+        embed = discord.Embed(
             title="error!",
             description="you must be an administrator to run this command.",
             color=discord.color.red()
