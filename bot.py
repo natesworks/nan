@@ -145,7 +145,7 @@ async def listrules(ctx):
             description="you must be an administrator to run this command.",
             color=discord.color.red()
         )
-        await ctx.reply(embed=embed, mention_author=false)
+        await ctx.reply(embed=embed, mention_author=False)
         return
 
     rules = get_rules(ctx.guild.id)
