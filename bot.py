@@ -1,8 +1,5 @@
-import datetime
 import discord
 from discord.ext import commands
-from discord.ext.commands import has_permissions, CheckFailure
-from collections import defaultdict
 import sqlite3
 import os
 from dotenv import load_dotenv
@@ -193,7 +190,7 @@ async def setstaffrole(ctx, role: discord.Role):
         return
 
     set_server_setting(ctx.guild.id, "staff_role_id", role.id)
-    await ctx.reply(f"Staff role set succesfully.", mention_author=False)
+    await ctx.reply("Staff role set succesfully.", mention_author=False)
 
 @bot.command()
 async def liststaff(ctx):
