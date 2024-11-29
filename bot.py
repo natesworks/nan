@@ -1,3 +1,4 @@
+import datetime
 import discord
 from discord.ext import commands
 import sqlite3
@@ -5,6 +6,7 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()
+
 TOKEN = os.getenv("TOKEN")
 OWNER = 1306137346583826452
 
@@ -35,6 +37,15 @@ CREATE TABLE IF NOT EXISTS rules (
     PRIMARY KEY (guild_id, name)
 )
 """)
+
+c.execute("""
+CREATE TABLE IF NOT EXISTS managers (
+    guild_id INTEGER,
+    user_id INTEGER,
+    PRIMARY KEY (guild_id, user_id)
+)
+""")
+
 conn.commit()
 
 def get_server_settings(guild_id):
@@ -48,6 +59,20 @@ def set_server_setting(guild_id, key, value):
         c.execute(f"UPDATE server_settings SET {key} = ? WHERE guild_id = ?", (value, guild_id))
     else:
         c.execute(f"INSERT INTO server_settings (guild_id, {key}) VALUES (?, ?)", (guild_id, value))
+    conn.commit()
+
+def is_manager(ctx):
+    if ctx.author.id == OWNER or ctx.guild.owner_id == ctx.author.id:
+        return True
+    c.execute("SELECT 1 FROM managers WHERE guild_id = ? AND user_id = ?", (ctx.guild.id, ctx.author.id))
+    return c.fetchone() is not None
+
+def add_manager(guild_id, user_id):
+    c.execute("INSERT OR IGNORE INTO managers (guild_id, user_id) VALUES (?, ?)", (guild_id, user_id))
+    conn.commit()
+
+def remove_manager(guild_id, user_id):
+    c.execute("DELETE FROM managers WHERE guild_id = ? AND user_id = ?", (guild_id, user_id))
     conn.commit()
 
 def get_rules(guild_id):
@@ -71,84 +96,58 @@ async def on_ready():
     print(f"Logged in as {bot.user}")
 
 @bot.command()
-async def setlogchannel(ctx, channel: discord.TextChannel):
-    if not ctx.author.guild_permissions.administrator and ctx.author.id != OWNER:
-        embed = discord.Embed(
-            title="Error!",
-            description="You must be an administrator to run this command.",
-            color=discord.Color.red()
-        )
-        await ctx.reply(embed=embed, mention_author=False)
-        return
-
-    set_server_setting(ctx.guild.id, "log_channel_id", channel.id)
-    await ctx.reply(f"Log channel set to {channel.mention}", mention_author=False)
+async def addmanager(ctx, member: discord.Member):
+    if ctx.author.id == OWNER or ctx.guild.owner_id == ctx.author.id:
+        add_manager(ctx.guild.id, member.id)
+        await ctx.send(f"{member.mention} has been added as a manager.")
+    else:
+        await ctx.send("You do not have permission to add managers.")
 
 @bot.command()
-async def addrule(ctx, name: str, triggers: str, amount: int, time: int, punishment: str):
-    if not ctx.author.guild_permissions.administrator and ctx.author.id != OWNER:
-        embed = discord.Embed(
-            title="Error!",
-            description="You must be an administrator to run this command.",
-            color=discord.Color.red()
-        )
-        await ctx.reply(embed=embed, mention_author=False)
-        return
+async def removemanager(ctx, member: discord.Member):
+    if ctx.author.id == OWNER or ctx.guild.owner_id == ctx.author.id:
+        remove_manager(ctx.guild.id, member.id)
+        await ctx.send(f"{member.mention} has been removed as a manager.")
+    else:
+        await ctx.send("You do not have permission to remove managers.")
 
+@bot.command()
+async def listmanagers(ctx):
+    c.execute("SELECT user_id FROM managers WHERE guild_id = ?", (ctx.guild.id,))
+    manager_ids = [row[0] for row in c.fetchall()]
+    managers = [ctx.guild.get_member(manager_id) for manager_id in manager_ids]
+    managers = [member.mention for member in managers if member]
+
+    embed = discord.Embed(title="Managers", color=0x006c8e)
+    if managers:
+        embed.description = ", ".join(managers)
+    else:
+        embed.description = "No managers set."
+    await ctx.send(embed=embed)
+
+@bot.command()
+@commands.check(is_manager)
+async def addrule(ctx, name: str, triggers: str, amount: int, time: int, punishment: str):
     if name in get_rules(ctx.guild.id):
-        await ctx.reply("Rule name already exists.", mention_author=False)
+        await ctx.send("Rule name already exists.")
         return
     add_rule(ctx.guild.id, name, triggers.split(";"), amount, time, punishment)
-    await ctx.reply(f"Rule {name} added.", mention_author=False)
+    await ctx.send(f"Rule {name} added.")
 
 @bot.command()
+@commands.check(is_manager)
 async def removerule(ctx, name: str):
-    if not ctx.author.guild_permissions.administrator and ctx.author.id != OWNER:
-        embed = discord.Embed(
-            title="Error!",
-            description="You must be an administrator to run this command.",
-            color=discord.Color.red()
-        )
-        await ctx.reply(embed=embed, mention_author=False)
-        return
-
     if name not in get_rules(ctx.guild.id) and name != "all":
-        await ctx.reply("Rule not found.", mention_author=False)
+        await ctx.send("Rule not found.")
         return
     remove_rule(ctx.guild.id, name)
-    await ctx.reply(f"Rule {name} removed." if name != "all" else "All rules removed.", mention_author=False)
-
-@bot.command()
-async def togglebots(ctx, value: str):
-    if not ctx.author.guild_permissions.administrator and ctx.author.id != OWNER:
-        embed = discord.Embed(
-            title="Error!",
-            description="You must be an administrator to run this command.",
-            color=discord.Color.red()
-        )
-        await ctx.reply(embed=embed, mention_author=False)
-        return
-
-    if value.lower() in ["true", "false"]:
-        set_server_setting(ctx.guild.id, "action_on_bots", int(value.lower() == "true"))
-        await ctx.reply(f"Take action on bots set to {value.lower() == 'true'}.", mention_author=False)
-    else:
-        await ctx.reply("Invalid value. Use 'true' or 'false'.", mention_author=False)
+    await ctx.send(f"Rule {name} removed." if name != "all" else "All rules removed.")
 
 @bot.command()
 async def listrules(ctx):
-    if not ctx.author.guild_permissions.administrator and ctx.author.id != OWNER:
-        embed = discord.embed(
-            title="error!",
-            description="you must be an administrator to run this command.",
-            color=discord.color.red()
-        )
-        await ctx.reply(embed=embed, mention_author=False)
-        return
-
     rules = get_rules(ctx.guild.id)
     if not rules:
-        await ctx.reply("No rules have been set.", mention_author=False)
+        await ctx.send("No rules have been set.")
         return
 
     embed = discord.Embed(title="Rules for this server", color=0x006c8e)
@@ -161,10 +160,33 @@ async def listrules(ctx):
                   f"**Punishment**: {details['punishment']}",
             inline=False
         )
-    await ctx.reply(embed=embed, mention_author=False)
+    await ctx.send(embed=embed)
 
-@bot.command(name='listadmins')
-async def admin_list(ctx, show_bots: str = "false"):
+@bot.command()
+async def clearrules(ctx):
+    if is_manager(ctx):
+        remove_rule(ctx.guild.id, "all")
+        await ctx.send("All rules have been cleared.")
+    else:
+        await ctx.send("You do not have permission to clear rules.")
+
+@bot.command()
+@commands.check(is_manager)
+async def setlogchannel(ctx, channel: discord.TextChannel):
+    set_server_setting(ctx.guild.id, "log_channel_id", channel.id)
+    await ctx.send(f"Log channel set to {channel.mention}")
+
+@bot.command()
+@commands.check(is_manager)
+async def togglebots(ctx, value: str):
+    if value.lower() in ["true", "false"]:
+        set_server_setting(ctx.guild.id, "action_on_bots", int(value.lower() == "true"))
+        await ctx.send(f"Take action on bots set to {value.lower() == 'true'}.")
+    else:
+        await ctx.send("Invalid value. Use 'true' or 'false'.")
+
+@bot.command()
+async def listadmins(ctx, show_bots: str = "false"):
     show_bots = show_bots.lower() == "true"
     admin_users = []
 
@@ -177,47 +199,39 @@ async def admin_list(ctx, show_bots: str = "false"):
         embed.description = ", ".join(admin_users)
     else:
         embed.description = "No administrators found."
-    await ctx.reply(embed=embed, mention_author=False)
+    await ctx.send(embed=embed)
 
 @bot.command()
+@commands.check(is_manager)
 async def setstaffrole(ctx, role: discord.Role):
-    if not ctx.author.guild_permissions.administrator and ctx.author.id != OWNER:
-        embed = discord.Embed(
-            title="Error!",
-            description="You must be an administrator to run this command.",
-            color=discord.Color.red()
-    )
-        await ctx.reply(embed=embed, mention_author=False)
-        return
-
     set_server_setting(ctx.guild.id, "staff_role_id", role.id)
-    await ctx.reply("Staff role set succesfully.", mention_author=False)
+    await ctx.send(f"Staff role set to {role.mention}")
 
 @bot.command()
-async def liststaff(ctx):
+async def listrole(ctx):
     settings = get_server_settings(ctx.guild.id)
     staff_role_id = settings.get("staff_role_id") if settings else None
     if not staff_role_id:
-        await ctx.reply("No staff role has been set.", mention_author=False)
+        await ctx.send("No staff role has been set.")
         return
 
     staff_role = ctx.guild.get_role(staff_role_id)
     if not staff_role:
-        await ctx.reply("Staff role not found. Please set it again.", mention_author=False)
+        await ctx.send("Staff role not found. Please set it again.")
         return
 
-    staff_members = [member.name for member in staff_role.members]
+    staff_members = [member.mention for member in staff_role.members]
 
     embed = discord.Embed(title=f"Members with the {staff_role.name} role", color=0x006c8e)
     if staff_members:
         embed.description = ", ".join(staff_members)
     else:
         embed.description = "No members with this role."
-    await ctx.reply(embed=embed, mention_author=False)
+    await ctx.send(embed=embed)
 
 @bot.command()
 async def help(ctx):
-    embed = discord.Embed(title="Nate's Anti Nuke Bot - Help", color=0x006c8e)
+    embed = discord.Embed(title="Nates' Anti Nuke Bot - Help", color=0x006c8e)
     
     embed.add_field(
         name="**`nan!setlogchannel <#channel>`**",
@@ -227,82 +241,71 @@ async def help(ctx):
     
     embed.add_field(
         name="**`nan!addrule <name> <triggers> <amount> <time> <punishment>`**",
-        value=(
-            "Add a rule to monitor actions on the server.\n"
-            "**Parameters:**\n"
-            "- **name**: A unique name for the rule.\n"
-            "- **triggers**: Semicolon-separated triggers (e.g., `kick;mute;ban`).\n"
-            "- **amount**: Number of actions to trigger the rule.\n"
-            "- **time**: Time frame (in seconds) for tracking actions.\n"
-            "- **punishment**: Action to apply (`ban`, `kick`, or `mute`)."
-        ),
+        value="Add a rule. Use `;` to separate multiple triggers.",
         inline=False
     )
-    
-    embed.add_field(
-        name="**`nan!removerule <name|all>`**",
-        value="Remove a specific rule by name or all rules (`all`).",
-        inline=False
-    )
-    
-    embed.add_field(
-        name="**`nan!togglebots <true|false>`**",
-        value="Enable or disable actions on bots (`true` or `false`).",
-        inline=False
-    )
-    
+
     embed.add_field(
         name="**`nan!listrules`**",
-        value="List all active rules for the server in a formatted embed.",
+        value="List all rules for the server.",
         inline=False
     )
-    
-    embed.add_field(
-        name="**`nan!listadmins [true|false]`**",
-        value=(
-            "List all server administrators.\n"
-            "- **true**: Include bots in the list.\n"
-            "- **false** (default): Exclude bots."
-        ),
-        inline=False
-    )
-    
-    embed.add_field(
-        name="**`nan!setstaffrole <@role>`**",
-        value="Assign a role to be used as staff for listing purposes.",
-        inline=False
-    )
-    
-    embed.add_field(
-        name="**`nan!liststaff`**",
-        value="List all members with the staff role in a formatted embed.",
-        inline=False
-    )
-    
-    embed.set_footer(text="All commands requiring setup or moderation access need administrator privileges.")
-    await ctx.reply(embed=embed, mention_author=False)
 
-@bot.command()
-async def massrole(ctx, role: discord.Role):
-    if not ctx.author.guild_permissions.administrator and ctx.author.id != OWNER:
-        embed = discord.Embed(
-            title="Error!",
-            description="You must be an administrator to run this command.",
-            color=discord.Color.red()
-        )
-        await ctx.reply(embed=embed, mention_author=False)
-        return
-    if not ctx.guild.me.guild_permissions.manage_roles:
-        await ctx.reply("I don't have the `Manage Roles` permission.", mention_author=False)
-        return
+    embed.add_field(
+        name="**`nan!removerule <name>`**",
+        value="Remove a rule. Use 'all' to remove all rules.",
+        inline=False
+    )
 
-    for member in ctx.guild.members:
-        try:
-            await member.add_roles(role)
-            print(f"Added {role.name} to {member.name}")
-        except Exception as e:
-            print(f"Failed to add {role.name} to {member.name}: {e}")
+    embed.add_field(
+        name="**`nan!setstaffrole <role>`**",
+        value="Set the staff role for your server.",
+        inline=False
+    )
 
-    await ctx.reply(f"Mass role assignment complete. {role.name} assigned to all members.", mention_author=False)
+    embed.add_field(
+        name="**`nan!listadmins`**",
+        value="List all administrators in the server.",
+        inline=False
+    )
+
+    embed.add_field(
+        name="**`nan!listrole`**",
+        value="List members with the staff role.",
+        inline=False
+    )
+
+    embed.add_field(
+        name="**`nan!togglebots <true/false>`**",
+        value="Toggle action on bots in your server.",
+        inline=False
+    )
+
+    embed.add_field(
+        name="**`nan!clearrules`**",
+        value="Clear all rules in the server.",
+        inline=False
+    )
+
+    embed.add_field(
+        name="**`nan!listmanagers`**",
+        value="List all managers for this server.",
+        inline=False
+    )
+
+    embed.add_field(
+        name="**`nan!addmanager <@member>`**",
+        value="Add a manager to your server.",
+        inline=False
+    )
+
+    embed.add_field(
+        name="**`nan!removemanager <@member>`**",
+        value="Remove a manager from your server.",
+        inline=False
+    )
+
+    await ctx.send(embed=embed)
 
 bot.run(TOKEN)
+
